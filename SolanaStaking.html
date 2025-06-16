@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solana Staking Rewards to Koinly CSV</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .lds-dual-ring {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+        }
+        .lds-dual-ring:after {
+            content: " ";
+            display: block;
+            width: 16px;
+            height: 16px;
+            margin: 2px;
+            border-radius: 50%;
+            border: 3px solid #fff;
+            border-color: #fff transparent #fff transparent;
+            animation: lds-dual-ring 1.2s linear infinite;
+        }
+        @keyframes lds-dual-ring {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-4xl bg-gray-800 rounded-lg shadow-xl p-6 md:p-8 space-y-6">
+        <!-- Header -->
+        <div class="text-center">
+            <h1 class="text-3xl font-bold text-white">Solana Staking Rewards Reporter</h1>
+            <p class="text-gray-400 mt-2">Generate a Koinly-compatible CSV of your staking rewards.</p>
+            <div class="mt-4 p-3 bg-blue-900/30 rounded-md text-sm text-blue-200">
+                <p><strong>💡 Tip:</strong> This app uses your Alchemy API key for reliable data access and a local database to store results. Run it multiple times to gradually build your complete history!</p>
+            </div>
+        </div>
+
+        <!-- Input Section -->
+        <div class="space-y-4">
+            <div>
+                <label for="publicKey" class="block text-sm font-medium text-gray-300 mb-1">Your Solana Public Key (Wallet Address)</label>
+                <input type="text" id="publicKey" class="w-full bg-gray-700 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder-gray-500" placeholder="Enter your public key, e.g., So1111...1111" value="">
+            </div>
+            <div>
+                <label for="network" class="block text-sm font-medium text-gray-300 mb-1">Network</label>
+                <select id="network" class="w-full bg-gray-700 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    <option value="mainnet" selected>Mainnet (Real SOL)</option>
+                    <option value="devnet">Devnet (Test SOL) - Use if you have devnet stakes</option>
+                </select>
+            </div>
+            <div>
+                <label for="timeRange" class="block text-sm font-medium text-gray-300 mb-1">Time Range</label>
+                <select id="timeRange" class="w-full bg-gray-700 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    <option value="10">Last 10 epochs (~3 weeks) - Very Fast</option>
+                    <option value="30">Last 30 epochs (~2 months) - Fast</option>
+                    <option value="50">Last 50 epochs (~3 months) - Good</option>
+                    <option value="90" selected>Last 90 epochs (~6 months)</option>
+                    <option value="180">Last 180 epochs (~1 year)</option>
+                    <option value="full">Full History - All epochs (can be stopped anytime)</option>
+                </select>
+            </div>
+            <div id="manual-epochs" class="hidden">
+                <label for="manualEpochs" class="block text-sm font-medium text-gray-300 mb-1">Manual Epoch Check (comma-separated)</label>
+                <input type="text" id="manualEpochs" class="w-full bg-gray-700 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder-gray-500" placeholder="e.g., 663, 708, 720">
+                <p class="text-xs text-gray-400 mt-1">Enter specific epoch numbers to check for missing rewards</p>
+            </div>
+            <div class="flex space-x-2">
+                <button id="generateBtn" class="flex-1 flex justify-center items-center bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-md transition duration-300 ease-in-out">
+                    <span id="btn-text">Generate Report</span>
+                    <div id="loading-spinner" class="hidden lds-dual-ring ml-2"></div>
+                </button>
+                <button id="stopBtn" class="hidden bg-orange-600 hover:bg-orange-700 text-white font-bold py-2.5 px-4 rounded-md transition duration-300 ease-in-out">
+                    Stop
+                </button>
+                <button id="retryFailedBtn" class="hidden bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2.5 px-4 rounded-md transition duration-300 ease-in-out">
+                    Retry Failed
+                </button>
+                <button id="clearDbBtn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 px-4 rounded-md transition duration-300 ease-in-out">
+                    Clear DB
+                </button>
+                <button id="checkSpecificBtn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-4 rounded-md transition duration-300 ease-in-out">
+                    Check Specific
+                </button>
+            </div>
+        </div>
+
+        <!-- Database Status -->
+        <div id="db-status" class="hidden p-3 bg-green-900/30 rounded-md text-sm text-green-200">
+            <p id="db-status-text">Database status will appear here...</p>
+        </div>
+
+        <!-- Data Storage Info -->
+        <div id="storage-info" class="hidden p-3 bg-purple-900/30 rounded-md text-sm text-purple-200">
+            <p><strong>💾 Data Storage:</strong> Your rewards data is stored locally in your browser using IndexedDB. Data persists between sessions and is private to your browser. Location: Browser → Developer Tools → Application → Storage → IndexedDB → SolanaRewardsDB</p>
+        </div>
+
+        <!-- Status & Results Section -->
+        <div id="results-container" class="hidden space-y-4">
+             <!-- Status Log -->
+            <div id="status" class="text-sm text-gray-400 bg-gray-700 p-4 rounded-md h-32 overflow-y-auto">
+                <p>Waiting to start...</p>
+            </div>
+            
+            <!-- Summary and Download -->
+            <div id="summary" class="hidden flex flex-col md:flex-row justify-between items-center bg-gray-700/50 p-4 rounded-md">
+                 <p id="summary-text" class="text-white mb-2 md:mb-0"></p>
+                 <button id="downloadBtn" class="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out">Download CSV</button>
+            </div>
+            
+            <!-- Rewards Table -->
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-gray-800 rounded-lg">
+                    <thead>
+                        <tr class="border-b border-gray-700">
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Date (UTC)</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Amount</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Currency</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Label</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Stake Account</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rewards-table-body">
+                        <!-- Rows will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const publicKeyInput = document.getElementById('publicKey');
+        const networkSelect = document.getElementById('network');
+        const timeRangeSelect = document.getElementById('timeRange');
+        const generateBtn = document.getElementById('generateBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const retryFailedBtn = document.getElementById('retryFailedBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const clearDbBtn = document.getElementById('clearDbBtn');
+        const checkSpecificBtn = document.getElementById('checkSpecificBtn');
+        const manualEpochsInput = document.getElementById('manualEpochs');
+        const manualEpochsDiv = document.getElementById('manual-epochs');
+        const resultsContainer = document.getElementById('results-container');
+        const summary = document.getElementById('summary');
+        const summaryText = document.getElementById('summary-text');
+        const rewardsTableBody = document.getElementById('rewards-table-body');
+        const statusDiv = document.getElementById('status');
+        const btnText = document.getElementById('btn-text');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const dbStatus = document.getElementById('db-status');
+        const dbStatusText = document.getElementById('db-status-text');
+        const storageInfo = document.getElementById('storage-info');
+
+        // Configuration
+        const MAINNET_RPC_URLS = [
+            'https://solana-mainnet.g.alchemy.com/v2/kyJwJGojvcojJjQX8-cAgFKzIWw5Uqd0',
+            'https://api.mainnet-beta.solana.com',
+            'https://solana-mainnet.g.alchemy.com/v2/demo',
+            'https://mainnet.helius-rpc.com/?api-key=demo',
+            'https://rpc.ankr.com/solana',
+            'https://solana.publicnode.com',
+            'https://solana-api.projectserum.com'
+        ];
+        
+        const DEVNET_RPC_URLS = [
+            'https://rpc.ankr.com/solana_devnet/0cf583e9b6b5e9723240108b12d93d9423d8c97097b2a4019b2ea46a543785b9',
+            'https://api.devnet.solana.com',
+            'https://solana-devnet.g.alchemy.com/v2/demo'
+        ];
+        
+        let currentRpcUrls = MAINNET_RPC_URLS;
+        let currentRpcIndex = 0;
+        const STAKE_PROGRAM_ID = 'Stake11111111111111111111111111111111111111';
+        const LAMPORTS_PER_SOL = 1_000_000_000;
+
+        let csvContent = '';
+        let db = null;
+        let isProcessingStopped = false;
+
+        // --- Database Functions ---
+        
+        async function initDatabase() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('SolanaRewardsDB', 1);
+                
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    db = request.result;
+                    resolve(db);
+                };
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    
+                    // Create rewards store
+                    if (!db.objectStoreNames.contains('rewards')) {
+                        const rewardsStore = db.createObjectStore('rewards', { keyPath: 'id' });
+                        rewardsStore.createIndex('walletAddress', 'walletAddress', { unique: false });
+                        rewardsStore.createIndex('epoch', 'epoch', { unique: false });
+                        rewardsStore.createIndex('stakeAccount', 'stakeAccount', { unique: false });
+                    }
+                    
+                    // Create processed epochs store
+                    if (!db.objectStoreNames.contains('processedEpochs')) {
+                        const epochsStore = db.createObjectStore('processedEpochs', { keyPath: 'id' });
+                        epochsStore.createIndex('walletAddress', 'walletAddress', { unique: false });
+                    }
+                };
+            });
+        }
+
+        async function saveRewardToDb(walletAddress, reward) {
+            const transaction = db.transaction(['rewards'], 'readwrite');
+            const store = transaction.objectStore('rewards');
+            
+            const rewardRecord = {
+                id: `${walletAddress}-${reward.epoch}-${reward.stakeAccount}`,
+                walletAddress: walletAddress,
+                epoch: reward.epoch,
+                stakeAccount: reward.stakeAccount,
+                amount: reward.amount,
+                effectiveSlot: reward.effectiveSlot,
+                timestamp: reward.timestamp,
+                savedAt: Date.now()
+            };
+            
+            await store.put(rewardRecord);
+        }
+
+        async function markEpochAsProcessed(walletAddress, epoch, success = true, errorType = null, retryCount = 0) {
+            const transaction = db.transaction(['processedEpochs'], 'readwrite');
+            const store = transaction.objectStore('processedEpochs');
+            
+            const epochRecord = {
+                id: `${walletAddress}-${epoch}`,
+                walletAddress: walletAddress,
+                epoch: epoch,
+                success: success,
+                errorType: errorType, // 'rate_limit', 'network', 'block_unavailable', 'rpc_error'
+                retryCount: retryCount,
+                processedAt: Date.now()
+            };
+            
+            await store.put(epochRecord);
+        }
+
+        async function getProcessedEpochs(walletAddress, includeFailures = false) {
+            const transaction = db.transaction(['processedEpochs'], 'readonly');
+            const store = transaction.objectStore('processedEpochs');
+            const index = store.index('walletAddress');
+            
+            return new Promise((resolve, reject) => {
+                const request = index.getAll(walletAddress);
+                request.onsuccess = () => {
+                    let results = request.result;
+                    if (!includeFailures) {
+                        // Only return successfully processed epochs for normal processing
+                        results = results.filter(epoch => epoch.success);
+                    }
+                    resolve(results);
+                };
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function getFailedEpochs(walletAddress) {
+            const transaction = db.transaction(['processedEpochs'], 'readonly');
+            const store = transaction.objectStore('processedEpochs');
+            const index = store.index('walletAddress');
+            
+            return new Promise((resolve, reject) => {
+                const request = index.getAll(walletAddress);
+                request.onsuccess = () => {
+                    // Return failed epochs that should be retried
+                    const results = request.result.filter(epoch => 
+                        !epoch.success && 
+                        (epoch.retryCount < 3 || epoch.errorType === 'rate_limit' || epoch.errorType === 'network')
+                    );
+                    resolve(results);
+                };
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function findMissingEpochs(walletAddress, minEpoch, maxEpoch) {
+            const processedEpochs = await getProcessedEpochs(walletAddress, true); // Include failures
+            const savedRewards = await getSavedRewards(walletAddress);
+            
+            const processedEpochNumbers = new Set(processedEpochs.map(p => p.epoch));
+            const rewardEpochNumbers = new Set(savedRewards.map(r => r.epoch));
+            
+            const missingEpochs = [];
+            for (let epoch = maxEpoch; epoch >= minEpoch; epoch--) {
+                // An epoch is missing if:
+                // 1. It hasn't been processed successfully, OR
+                // 2. It was processed but we don't have reward data for it
+                const wasProcessedSuccessfully = processedEpochNumbers.has(epoch) && 
+                    processedEpochs.find(p => p.epoch === epoch)?.success;
+                const hasRewardData = rewardEpochNumbers.has(epoch);
+                
+                if (!wasProcessedSuccessfully || !hasRewardData) {
+                    missingEpochs.push(epoch);
+                }
+            }
+            
+            return missingEpochs;
+        }
+
+        async function getSavedRewards(walletAddress) {
+            const transaction = db.transaction(['rewards'], 'readonly');
+            const store = transaction.objectStore('rewards');
+            const index = store.index('walletAddress');
+            
+            return new Promise((resolve, reject) => {
+                const request = index.getAll(walletAddress);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function clearDatabase() {
+            const transaction = db.transaction(['rewards', 'processedEpochs'], 'readwrite');
+            await transaction.objectStore('rewards').clear();
+            await transaction.objectStore('processedEpochs').clear();
+            logStatus('🗑️ Database cleared successfully', 'success');
+            updateDbStatus();
+        }
+
+        async function updateDbStatus() {
+            if (!db) return;
+            
+            try {
+                const publicKey = publicKeyInput.value.trim();
+                if (!publicKey) return;
+                
+                const savedRewards = await getSavedRewards(publicKey);
+                const processedEpochs = await getProcessedEpochs(publicKey);
+                
+                if (savedRewards.length > 0 || processedEpochs.length > 0) {
+                    dbStatus.style.display = 'block';
+                    storageInfo.style.display = 'block';
+                    
+                    // Check for failed epochs
+                    const failedEpochs = await getFailedEpochs(publicKey);
+                    const allProcessed = await getProcessedEpochs(publicKey, true);
+                    const successfulEpochs = allProcessed.filter(e => e.success);
+                    
+                    dbStatusText.innerHTML = `
+                        📊 <strong>Database Status:</strong><br>
+                        • ${savedRewards.length} rewards saved<br>
+                        • ${successfulEpochs.length} epochs processed successfully<br>
+                        • ${failedEpochs.length} failed epochs (retryable)<br>
+                        • Last update: ${new Date().toLocaleString()}
+                    `;
+                    
+                    // Show retry button if there are failed epochs
+                    if (failedEpochs.length > 0) {
+                        retryFailedBtn.style.display = 'inline-block';
+                    } else {
+                        retryFailedBtn.style.display = 'none';
+                    }
+                } else {
+                    dbStatus.style.display = 'none';
+                    storageInfo.style.display = 'none';
+                    retryFailedBtn.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error updating DB status:', error);
+            }
+        }
+
+        // --- Core Logic ---
+
+        generateBtn.addEventListener('click', async () => {
+            const publicKey = publicKeyInput.value.trim();
+            const selectedNetwork = networkSelect.value;
+            const solanaAddressRegex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+            resultsContainer.style.display = 'block';
+
+            if (!publicKey) {
+                logStatus('Error: Please enter a Solana public key.', 'error');
+                return;
+            }
+            if (!solanaAddressRegex.test(publicKey)) {
+                logStatus('Error: Invalid Solana public key format. Please enter a valid base58 address.', 'error');
+                return;
+            }
+            
+            // Set the appropriate RPC URLs based on network selection
+            currentRpcUrls = selectedNetwork === 'devnet' ? DEVNET_RPC_URLS : MAINNET_RPC_URLS;
+            currentRpcIndex = 0; // Reset to first endpoint
+            
+            logStatus(`Using ${selectedNetwork.toUpperCase()} network`, 'info');
+            
+            resetUI();
+            toggleLoading(true);
+            isProcessingStopped = false;
+            
+            // Add initial delay to avoid immediate rate limiting
+            logStatus('⏳ Waiting 2 seconds to respect rate limits...', 'info');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            try {
+                // Initialize database
+                if (!db) {
+                    await initDatabase();
+                    logStatus('📊 Database initialized', 'success');
+                }
+                
+                // Check existing data
+                const savedRewards = await getSavedRewards(publicKey);
+                const processedEpochs = await getProcessedEpochs(publicKey);
+                
+                if (savedRewards.length > 0) {
+                    logStatus(`📊 Found ${savedRewards.length} previously saved rewards`, 'success');
+                }
+                
+                // First, test basic connectivity
+                logStatus('Testing RPC connectivity...');
+                await testRpcConnectivity();
+                
+                logStatus('Fetching associated stake accounts...');
+                const stakeAccounts = await getStakeAccounts(publicKey);
+                if (stakeAccounts.length === 0) {
+                    logStatus('No stake accounts found for this public key. Make sure it is the withdrawer authority.', 'info');
+                    toggleLoading(false);
+                    return;
+                }
+                logStatus(`Found ${stakeAccounts.length} stake account(s).`);
+                stakeAccounts.forEach(acc => logStatus(`- ${acc.pubkey}`, 'info'));
+
+                logStatus('Fetching current epoch information...');
+                const currentEpoch = await getEpoch();
+                logStatus(`Current epoch is ${currentEpoch}. Fetching rewards...`);
+
+                const allRewards = await getRewardsForAllAccounts(stakeAccounts, currentEpoch, selectedNetwork, publicKey);
+
+                // Combine with saved rewards
+                const combinedRewards = [...savedRewards, ...allRewards];
+                
+                // Remove duplicates based on epoch and stake account
+                const uniqueRewards = combinedRewards.filter((reward, index, self) => 
+                    index === self.findIndex(r => r.epoch === reward.epoch && r.stakeAccount === reward.stakeAccount)
+                );
+
+                if (uniqueRewards.length > 0) {
+                    uniqueRewards.sort((a, b) => b.epoch - a.epoch);
+                    logStatus(`Total unique rewards: ${uniqueRewards.length} (${allRewards.length} new + ${savedRewards.length} from database)`, 'success');
+                    displayResults(uniqueRewards);
+                    prepareCsv(uniqueRewards);
+                    summary.style.display = 'flex';
+                } else {
+                    logStatus('No staking rewards found for the given accounts.', 'info');
+                    summaryText.textContent = 'No staking rewards found.';
+                    summary.style.display = 'flex';
+                    downloadBtn.style.display = 'none';
+                }
+
+                await updateDbStatus();
+
+            } catch (error) {
+                console.error("Caught error object:", error);
+
+                let errorMessage = "An unknown error occurred.";
+                if (error instanceof Error) {
+                    errorMessage = error.message || "No error message provided.";
+                } else if (typeof error === 'string') {
+                    errorMessage = error;
+                }
+
+                logStatus('An error occurred during processing:', 'error');
+                logStatus(errorMessage, 'error');
+
+                if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+                    logStatus('This often indicates a network issue or that the RPC endpoint is busy or down. Please check your connection and try again in a few moments.', 'info');
+                } else if (errorMessage.includes('Invalid params')) {
+                    logStatus('The RPC server rejected the request. Please double-check that the entered Solana address is correct.', 'info');
+                }
+            } finally {
+                toggleLoading(false);
+            }
+        });
+
+        stopBtn.addEventListener('click', () => {
+            isProcessingStopped = true;
+            logStatus('🛑 Stop requested by user...', 'info');
+            toggleLoading(false);
+        });
+
+        retryFailedBtn.addEventListener('click', async () => {
+            const publicKey = publicKeyInput.value.trim();
+            if (!publicKey) {
+                logStatus('Error: Please enter a Solana public key.', 'error');
+                return;
+            }
+
+            const failedEpochs = await getFailedEpochs(publicKey);
+            if (failedEpochs.length === 0) {
+                logStatus('No failed epochs to retry.', 'info');
+                return;
+            }
+
+            logStatus(`🔄 Retrying ${failedEpochs.length} failed epochs: ${failedEpochs.map(e => e.epoch).join(', ')}`, 'info');
+            
+            // Set time range to full and trigger processing
+            timeRangeSelect.value = 'full';
+            generateBtn.click();
+        });
+
+        clearDbBtn.addEventListener('click', async () => {
+            if (confirm('Are you sure you want to clear all saved rewards data?')) {
+                await clearDatabase();
+            }
+        });
+
+        checkSpecificBtn.addEventListener('click', () => {
+            if (manualEpochsDiv.style.display === 'none' || manualEpochsDiv.style.display === '') {
+                manualEpochsDiv.style.display = 'block';
+                checkSpecificBtn.textContent = 'Hide Manual';
+            } else {
+                manualEpochsDiv.style.display = 'none';
+                checkSpecificBtn.textContent = 'Check Specific';
+            }
+        });
+
+        downloadBtn.addEventListener('click', () => {
+            if (csvContent) {
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', 'solana_koinly_rewards.csv');
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        });
+
+        // Update DB status when wallet address changes
+        publicKeyInput.addEventListener('input', updateDbStatus);
+        
+        // --- Solana RPC Functions ---
+
+        async function testRpcConnectivity() {
+            try {
+                const result = await makeRpcRequest('getHealth', []);
+                logStatus('RPC connectivity test passed!', 'success');
+                return result;
+            } catch (error) {
+                // If getHealth fails, try a simpler method
+                try {
+                    const result = await makeRpcRequest('getVersion', []);
+                    logStatus('RPC connectivity test passed (via getVersion)!', 'success');
+                    return result;
+                } catch (error2) {
+                    logStatus('RPC connectivity test failed on all endpoints', 'error');
+                    throw error2;
+                }
+            }
+        }
+
+        async function makeRpcRequest(method, params, retryCount = 0, alchemyRetries = 0) {
+            const maxRetries = currentRpcUrls.length;
+            const maxAlchemyRetries = 3; // Limit Alchemy retries before switching
+            
+            try {
+                const currentUrl = currentRpcUrls[currentRpcIndex];
+                logStatus(`Trying RPC endpoint: ${currentUrl.split('/').slice(0,3).join('/')}...`, 'info');
+                
+                const response = await fetch(currentUrl, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: Math.floor(Math.random() * 10000),
+                        method: method,
+                        params: params,
+                    }),
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text().catch(() => 'Unable to read error response');
+                    throw new Error(`HTTP ${response.status} ${response.statusText}: ${errorText}`);
+                }
+
+                const data = await response.json();
+                if (data.error) {
+                    const rpcErrorMessage = data.error.message + (data.error.code ? ` (code: ${data.error.code})` : '');
+                    throw new Error(`RPC Error: ${rpcErrorMessage}`);
+                }
+                
+                logStatus(`✅ Successfully connected to ${currentUrl.split('/').slice(0,3).join('/')}`, 'success');
+                return data.result;
+                
+            } catch (networkError) {
+                logStatus(`❌ Failed: ${networkError.message}`, 'error');
+                
+                // Special handling for Alchemy rate limits
+                if (networkError.message.includes('429') && currentRpcIndex === 0) {
+                    if (alchemyRetries < maxAlchemyRetries) {
+                        logStatus(`⏳ Alchemy rate limit hit (${alchemyRetries + 1}/${maxAlchemyRetries}), waiting 5 seconds...`, 'info');
+                        await new Promise(resolve => setTimeout(resolve, 5000));
+                        return makeRpcRequest(method, params, retryCount, alchemyRetries + 1);
+                    } else {
+                        logStatus(`⚠️ Alchemy rate limit exceeded max retries, switching to fallback endpoints`, 'info');
+                        // Force switch to next endpoint
+                        currentRpcIndex = 1;
+                    }
+                }
+                
+                if (retryCount < maxRetries - 1) {
+                    // Try next RPC endpoint
+                    currentRpcIndex = (currentRpcIndex + 1) % currentRpcUrls.length;
+                    logStatus(`Switching to next RPC endpoint...`, 'info');
+                    
+                    // If we're switching back to Alchemy (index 0), wait longer to respect rate limits
+                    const waitTime = currentRpcIndex === 0 ? 3000 : 1000;
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                    return makeRpcRequest(method, params, retryCount + 1, 0); // Reset Alchemy retry counter
+                } else {
+                    throw new Error(`All ${maxRetries} RPC endpoints failed. Last error: ${networkError.message}`);
+                }
+            }
+        }
+
+        async function getStakeAccounts(publicKey) {
+            const params = [
+                STAKE_PROGRAM_ID,
+                {
+                    encoding: 'jsonParsed',
+                    filters: [
+                        {
+                            memcmp: {
+                                offset: 44, 
+                                bytes: publicKey,
+                            },
+                        },
+                    ],
+                },
+            ];
+            return await makeRpcRequest('getProgramAccounts', params);
+        }
+
+        async function getEpoch() {
+            const result = await makeRpcRequest('getEpochInfo', []);
+            return result.epoch;
+        }
+        
+        async function getRewardsForAllAccounts(stakeAccounts, currentEpoch, selectedNetwork, walletAddress) {
+             const allRewards = [];
+             const stakeAccountAddresses = stakeAccounts.map(acc => acc.pubkey);
+             
+             // Check if manual epochs are specified
+             const manualEpochsText = manualEpochsInput.value.trim();
+             let specificEpochs = [];
+             let minEpoch, isFullHistory = false;
+             
+             if (manualEpochsText) {
+                 // Parse manual epochs
+                 specificEpochs = manualEpochsText.split(',')
+                     .map(e => parseInt(e.trim()))
+                     .filter(e => !isNaN(e) && e >= 0 && e <= currentEpoch)
+                     .sort((a, b) => b - a); // Sort descending
+                 
+                 if (specificEpochs.length === 0) {
+                     logStatus('Error: No valid epoch numbers found in manual input.', 'error');
+                     toggleLoading(false);
+                     return [];
+                 }
+                 
+                 logStatus(`🎯 Manual Mode: Checking specific epochs: ${specificEpochs.join(', ')}`, 'success');
+                 minEpoch = Math.min(...specificEpochs);
+             } else {
+                 // Get the selected time range from the dropdown
+                 const selectedRange = timeRangeSelect.value;
+                 
+                 if (selectedRange === 'full') {
+                     minEpoch = 0; // Start from epoch 0 for full history
+                     isFullHistory = true;
+                     logStatus(`🔑 Full History Mode: Will process all epochs from current back to epoch 0`, 'success');
+                 } else {
+                     minEpoch = Math.max(0, currentEpoch - parseInt(selectedRange));
+                     logStatus(`🔑 Using dedicated Alchemy API key for reliable data access`, 'success');
+                 }
+             }
+             
+             const timeRangeText = isFullHistory ? 'Full History' :
+                                   selectedRange <= 30 ? '~2 months' : 
+                                   selectedRange <= 90 ? '~6 months' : 
+                                   selectedRange <= 180 ? '~1 year' : '~2 years';
+             logStatus(`Scanning epochs ${minEpoch} to ${currentEpoch} (${timeRangeText})...`);
+
+             // Get already processed epochs (only successful ones)
+             const processedEpochs = await getProcessedEpochs(walletAddress, false);
+             const processedEpochNumbers = new Set(processedEpochs.map(p => p.epoch));
+             
+             // Also check for missing epochs (gaps in our data)
+             const missingEpochs = await findMissingEpochs(walletAddress, minEpoch, currentEpoch);
+             
+             // Create list of epochs to process
+             let epochsToProcess = [];
+             
+             if (specificEpochs.length > 0) {
+                 // Manual mode: only process specified epochs
+                 epochsToProcess = specificEpochs;
+                 logStatus(`🎯 Manual check: Processing ${epochsToProcess.length} specified epochs`, 'info');
+             } else {
+                 // Normal mode: unprocessed + missing/failed
+                 for (let epoch = currentEpoch; epoch >= minEpoch; epoch--) {
+                     if (!processedEpochNumbers.has(epoch) || missingEpochs.includes(epoch)) {
+                         epochsToProcess.push(epoch);
+                     }
+                 }
+             }
+             
+             if (epochsToProcess.length === 0) {
+                 logStatus(`✅ All epochs in range already processed! Found ${processedEpochs.length} processed epochs.`, 'success');
+                 return [];
+             }
+             
+             const retryCount = missingEpochs.length;
+             if (retryCount > 0) {
+                 logStatus(`🔄 Found ${retryCount} missing/failed epochs to retry: ${missingEpochs.slice(0, 10).join(', ')}${missingEpochs.length > 10 ? '...' : ''}`, 'info');
+             }
+             
+             logStatus(`📊 Processing ${epochsToProcess.length} epochs (${epochsToProcess.length - retryCount} new + ${retryCount} retries)`, 'info');
+
+             // Process epochs one by one to avoid overwhelming the RPC endpoint
+             let consecutiveFailures = 0;
+             let totalProcessed = 0;
+             
+             for (const epoch of epochsToProcess) {
+                 // Check if user requested stop
+                 if (isProcessingStopped) {
+                     logStatus(`🛑 Processing stopped by user at epoch ${epoch}`, 'info');
+                     break;
+                 }
+                 
+                 totalProcessed++;
+                 const progressText = isFullHistory ? 
+                     `Checking epoch ${epoch}... (processed ${totalProcessed}, remaining ~${epoch - minEpoch})` :
+                     `Checking epoch ${epoch}... (${totalProcessed}/${epochsToProcess.length})`;
+                 logStatus(progressText);
+                 
+                 try {
+                     const params = [stakeAccountAddresses, { epoch: epoch }];
+                     const rewards = await makeRpcRequest('getInflationReward', params);
+                     
+                     let epochHasRewards = false;
+                     if (rewards) {
+                         for(let i = 0; i < rewards.length; i++) {
+                             const reward = rewards[i];
+                             if(reward) {
+                                 // Get timestamp for this reward
+                                 try {
+                                     const timestamp = await getBlockTime(reward.effectiveSlot);
+                                     const rewardWithTimestamp = { ...reward, epoch: epoch, stakeAccount: stakeAccountAddresses[i], timestamp: timestamp };
+                                     
+                                     if (timestamp) {
+                                         allRewards.push(rewardWithTimestamp);
+                                         await saveRewardToDb(walletAddress, rewardWithTimestamp);
+                                         epochHasRewards = true;
+                                         logStatus(`💰 Found reward: ${(reward.amount / LAMPORTS_PER_SOL).toFixed(6)} SOL`, 'success');
+                                     }
+                                 } catch (timestampError) {
+                                     logStatus(`⚠️ Could not get timestamp for reward in epoch ${epoch}`, 'error');
+                                 }
+                             }
+                         }
+                     }
+                     
+                     // Mark epoch as processed successfully
+                     await markEpochAsProcessed(walletAddress, epoch, true);
+                     
+                     consecutiveFailures = 0; // Reset failure counter on success
+                     // Add a longer delay between requests to be respectful to Alchemy rate limits
+                     await new Promise(resolve => setTimeout(resolve, 1000));
+                     
+                 } catch (error) {
+                     consecutiveFailures++;
+                     logStatus(`⚠️ Failed epoch ${epoch}: ${error.message}`, 'error');
+                     
+                     // Determine error type for smarter retry logic
+                     let errorType = 'rpc_error';
+                     if (error.message.includes('429') || error.message.includes('rate limit')) {
+                         errorType = 'rate_limit';
+                     } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                         errorType = 'network';
+                     } else if (error.message.includes('Block not available') || error.message.includes('Slot was skipped')) {
+                         errorType = 'block_unavailable';
+                     }
+                     
+                     // Get existing retry count for this epoch
+                     const existingRecord = await getProcessedEpochs(walletAddress, true);
+                     const existingEpoch = existingRecord.find(e => e.epoch === epoch);
+                     const currentRetryCount = existingEpoch ? existingEpoch.retryCount + 1 : 1;
+                     
+                     // Mark epoch as failed with error type and retry count
+                     await markEpochAsProcessed(walletAddress, epoch, false, errorType, currentRetryCount);
+                     
+                     // If we have too many consecutive failures, suggest stopping
+                     if (consecutiveFailures >= 10 && totalProcessed >= 10) {
+                         logStatus(`⚠️ Too many consecutive failures. Stopping early to avoid wasting time.`, 'info');
+                         logStatus(`💡 Use "Retry Failed" button later to retry failed epochs.`, 'info');
+                         break;
+                     }
+                     
+                     // Continue with next epoch instead of failing completely
+                     await new Promise(resolve => setTimeout(resolve, 200));
+                 }
+             }
+
+            if (allRewards.length > 0) {
+                 logStatus(`✅ Successfully processed ${allRewards.length} new rewards!`, 'success');
+                 return allRewards;
+            } else {
+                logStatus(`No new rewards found in the scanned epochs.`, 'info');
+                logStatus(`💡 Try running again later when RPC endpoints have better data availability.`, 'info');
+            }
+             
+            return allRewards;
+        }
+
+        async function getBlockTime(slot) {
+            try {
+                const currentUrl = currentRpcUrls[currentRpcIndex];
+                const response = await fetch(currentUrl, { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: Math.floor(Math.random() * 10000),
+                        method: 'getBlockTime',
+                        params: [slot]
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                if (result.error) {
+                    throw new Error(result.error.message);
+                }
+                
+                return result.result;
+            } catch (error) {
+                console.warn(`Failed to get block time for slot ${slot}:`, error);
+                return null;
+            }
+        }
+
+        async function getBlockTimes(slots) {
+            const batchSize = 50; // Reduced batch size for better reliability
+            let timestamps = [];
+            for (let i = 0; i < slots.length; i += batchSize) {
+                const slotBatch = slots.slice(i, i + batchSize);
+                const requests = slotBatch.map(slot => ({ jsonrpc: '2.0', id: slot, method: 'getBlockTime', params: [slot] }));
+                
+                try {
+                    const currentUrl = currentRpcUrls[currentRpcIndex];
+                    const response = await fetch(currentUrl, { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        body: JSON.stringify(requests) 
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const results = await response.json();
+                    
+                    const timeMap = {};
+                    if (Array.isArray(results)) {
+                        results.forEach(r => {
+                            if (r.id && r.result) {
+                                timeMap[r.id] = r.result;
+                            }
+                        });
+                    }
+                    timestamps = timestamps.concat(slotBatch.map(slot => timeMap[slot]));
+                    
+                    // Small delay to avoid overwhelming the endpoint
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                    
+                } catch (error) {
+                    console.warn(`Failed to get block times for batch ${i}-${i+batchSize}:`, error);
+                    // Fill with null values for this batch
+                    timestamps = timestamps.concat(new Array(slotBatch.length).fill(null));
+                }
+            }
+            return timestamps;
+        }
+
+        // --- UI and Helper Functions ---
+        
+        function resetUI() {
+            rewardsTableBody.innerHTML = '';
+            statusDiv.innerHTML = '<p>Waiting to start...</p>';
+            resultsContainer.style.display = 'block';
+            summary.style.display = 'none';
+            summaryText.textContent = '';
+            downloadBtn.style.display = 'block';
+            csvContent = '';
+        }
+
+        function toggleLoading(isLoading) {
+            if (isLoading) {
+                btnText.textContent = 'Processing...';
+                loadingSpinner.style.display = 'inline-block';
+                generateBtn.disabled = true;
+                generateBtn.classList.add('cursor-not-allowed', 'opacity-75');
+                stopBtn.style.display = 'inline-block';
+            } else {
+                btnText.textContent = 'Generate Report';
+                loadingSpinner.style.display = 'none';
+                generateBtn.disabled = false;
+                generateBtn.classList.remove('cursor-not-allowed', 'opacity-75');
+                stopBtn.style.display = 'none';
+            }
+        }
+
+        function logStatus(message, type = 'info') {
+             const colorClasses = { error: 'text-red-400', success: 'text-green-400', info: 'text-gray-400' };
+             const p = document.createElement('p');
+             p.textContent = message;
+             p.className = colorClasses[type] || 'text-gray-400';
+             statusDiv.appendChild(p);
+             statusDiv.scrollTop = statusDiv.scrollHeight;
+        }
+
+        function displayResults(rewards) {
+            rewardsTableBody.innerHTML = '';
+            let totalRewardsSol = 0;
+
+            rewards.forEach(reward => {
+                const rewardSol = reward.amount / LAMPORTS_PER_SOL;
+                totalRewardsSol += rewardSol;
+                
+                const date = reward.timestamp ? new Date(reward.timestamp * 1000).toISOString().replace('T', ' ').substring(0, 19) : 'Unknown';
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-gray-700 hover:bg-gray-700/50';
+                tr.innerHTML = `
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-300">${date}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-green-400">${rewardSol.toFixed(9)}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-300">SOL</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-300"><span class="bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded-full">reward</span></td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-400 font-mono text-xs">${reward.stakeAccount}</td>
+                `;
+                rewardsTableBody.appendChild(tr);
+            });
+            
+            summaryText.textContent = `Found ${rewards.length} reward transactions, totaling ${totalRewardsSol.toFixed(6)} SOL.`;
+        }
+        
+        function prepareCsv(rewards) {
+            const header = 'Koinly Date,Received Amount,Received Currency,Label,Description,TxHash\n';
+            const rows = rewards.filter(r => r.timestamp).map(r => {
+                const koinlyDate = new Date(r.timestamp * 1000).toISOString().replace('.000Z', 'Z').replace('T', ' ');
+                const amount = r.amount / LAMPORTS_PER_SOL;
+                const description = `Staking reward from account ${r.stakeAccount} in epoch ${r.epoch}`;
+                const txHash = `reward-${r.epoch}-${r.stakeAccount}`;
+                return `${koinlyDate},${amount.toFixed(9)},SOL,reward,"${description}",${txHash}`;
+            }).join('\n');
+            
+            csvContent = header + rows;
+        }
+
+        // Initialize database on page load
+        window.addEventListener('load', async () => {
+            try {
+                await initDatabase();
+                await updateDbStatus();
+            } catch (error) {
+                console.error('Failed to initialize database:', error);
+            }
+        });
+
+    </script>
+</body>
+</html>
