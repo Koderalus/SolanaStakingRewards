@@ -43,13 +43,23 @@
         <div class="text-center">
             <h1 class="text-3xl font-bold text-white">Solana Staking Rewards Reporter</h1>
             <p class="text-gray-400 mt-2">Generate a Koinly-compatible CSV of your staking rewards.</p>
-            <div class="mt-4 p-3 bg-blue-900/30 rounded-md text-sm text-blue-200">
-                <p><strong>💡 Tip:</strong> This app uses your Alchemy API key for reliable data access and a local database to store results. Run it multiple times to gradually build your complete history!</p>
+            <div class="mt-4 p-3 bg-blue-900/30 rounded-md text-sm text-blue-200 text-left">
+                <p><strong>💡 Tips:</strong> This app stores your configuration locally and uses a database to build your reward history incrementally. <BR>
+                                            You will see rate limit or compute capacity errors, this is expected, I've slowed the calls as much as I can. <BR>
+                                            Re-running the same range will keep trying any previously failed epochs until data exists in the browser table.<BR>
+                                            If running Full History, it will start from highest epoch where no data exists, then will cycle back to epoch 1. <BR>
+                                            You can stop this at anytime when you know no more data exists in the earlier epochs.<BR>
+                                            When you have full history, just keep updating the existing data using the smaller time ranges.</p>
             </div>
         </div>
 
         <!-- Input Section -->
         <div class="space-y-4">
+            <div>
+                <label for="apiKey" class="block text-sm font-medium text-gray-300 mb-1">Alchemy API Key (Essential)</label>
+                <input type="text" id="apiKey" class="w-full bg-gray-700 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder-gray-500" placeholder="Enter your Alchemy API key for better reliability">
+                <p class="text-xs text-gray-400 mt-1">Get your free API key at <a href="https://alchemy.com" target="_blank" class="text-blue-400 hover:underline">alchemy.com</a>. Without an API key, only public endpoints will be used, which are very unreliable.</p>
+            </div>
             <div>
                 <label for="publicKey" class="block text-sm font-medium text-gray-300 mb-1">Your Solana Public Key (Wallet Address)</label>
                 <input type="text" id="publicKey" class="w-full bg-gray-700 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder-gray-500" placeholder="Enter your public key, e.g., So1111...1111" value="">
@@ -94,6 +104,9 @@
                 <button id="checkSpecificBtn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-4 rounded-md transition duration-300 ease-in-out">
                     Check Specific
                 </button>
+                <button id="saveConfigBtn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2.5 px-4 rounded-md transition duration-300 ease-in-out">
+                    💾 Save Config
+                </button>
             </div>
         </div>
 
@@ -125,6 +138,7 @@
                 <table class="min-w-full bg-gray-800 rounded-lg">
                     <thead>
                         <tr class="border-b border-gray-700">
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Epoch</th>
                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Date (UTC)</th>
                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Amount</th>
                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Currency</th>
@@ -142,6 +156,7 @@
     </div>
 
     <script>
+        const apiKeyInput = document.getElementById('apiKey');
         const publicKeyInput = document.getElementById('publicKey');
         const networkSelect = document.getElementById('network');
         const timeRangeSelect = document.getElementById('timeRange');
@@ -151,6 +166,7 @@
         const downloadBtn = document.getElementById('downloadBtn');
         const clearDbBtn = document.getElementById('clearDbBtn');
         const checkSpecificBtn = document.getElementById('checkSpecificBtn');
+        const saveConfigBtn = document.getElementById('saveConfigBtn');
         const manualEpochsInput = document.getElementById('manualEpochs');
         const manualEpochsDiv = document.getElementById('manual-epochs');
         const resultsContainer = document.getElementById('results-container');
@@ -165,23 +181,31 @@
         const storageInfo = document.getElementById('storage-info');
 
         // Configuration
-        const MAINNET_RPC_URLS = [
-            'https://solana-mainnet.g.alchemy.com/v2/kyJwJGojvcojJjQX8-cAgFKzIWw5Uqd0',
-            'https://api.mainnet-beta.solana.com',
-            'https://solana-mainnet.g.alchemy.com/v2/demo',
-            'https://mainnet.helius-rpc.com/?api-key=demo',
-            'https://rpc.ankr.com/solana',
-            'https://solana.publicnode.com',
-            'https://solana-api.projectserum.com'
-        ];
+        function getMainnetRpcUrls(apiKey = null) {
+            const urls = [];
+            if (apiKey) {
+                urls.push(`https://solana-mainnet.g.alchemy.com/v2/${apiKey}`);
+            }
+            urls.push(
+                'https://api.mainnet-beta.solana.com',
+                'https://solana-mainnet.g.alchemy.com/v2/demo',
+                'https://mainnet.helius-rpc.com/?api-key=demo',
+                'https://rpc.ankr.com/solana',
+                'https://solana.publicnode.com',
+                'https://solana-api.projectserum.com'
+            );
+            return urls;
+        }
         
-        const DEVNET_RPC_URLS = [
-            'https://rpc.ankr.com/solana_devnet/0cf583e9b6b5e9723240108b12d93d9423d8c97097b2a4019b2ea46a543785b9',
-            'https://api.devnet.solana.com',
-            'https://solana-devnet.g.alchemy.com/v2/demo'
-        ];
+        function getDevnetRpcUrls() {
+            return [
+                'https://api.devnet.solana.com',
+                'https://solana-devnet.g.alchemy.com/v2/demo',
+                'https://rpc.ankr.com/solana_devnet'
+            ];
+        }
         
-        let currentRpcUrls = MAINNET_RPC_URLS;
+        let currentRpcUrls = getMainnetRpcUrls();
         let currentRpcIndex = 0;
         const STAKE_PROGRAM_ID = 'Stake11111111111111111111111111111111111111';
         const LAMPORTS_PER_SOL = 1_000_000_000;
@@ -189,6 +213,98 @@
         let csvContent = '';
         let db = null;
         let isProcessingStopped = false;
+
+        // --- Configuration Management ---
+        
+        function saveConfig() {
+            const config = {
+                apiKey: apiKeyInput.value.trim(),
+                walletAddress: publicKeyInput.value.trim()
+            };
+            localStorage.setItem('solanaStakingConfig', JSON.stringify(config));
+        }
+
+        function downloadConfigFile() {
+            const config = {
+                defaultWalletAddress: publicKeyInput.value.trim(),
+                alchemyApiKey: apiKeyInput.value.trim(),
+                ankrApiKey: "",
+                note: "This file is gitignored and contains your personal configuration. Place this file in the same directory as the HTML file."
+            };
+            
+            const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'config.json');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            logStatus('📄 config.json file downloaded! Place it in the same directory as the HTML file.', 'success');
+        }
+
+        async function loadConfig() {
+            try {
+                // First try to load from localStorage
+                const savedConfig = localStorage.getItem('solanaStakingConfig');
+                if (savedConfig) {
+                    const config = JSON.parse(savedConfig);
+                    if (config.apiKey) {
+                        apiKeyInput.value = config.apiKey;
+                    }
+                    if (config.walletAddress) {
+                        publicKeyInput.value = config.walletAddress;
+                    }
+                    return; // Exit early if localStorage config exists
+                }
+                
+                // If no localStorage config, try to load from external config.json
+                await loadFromConfigFile();
+                
+            } catch (error) {
+                console.warn('Failed to load saved configuration:', error);
+            }
+        }
+
+        async function loadFromConfigFile() {
+            try {
+                const response = await fetch('./config.json');
+                if (response.ok) {
+                    const config = await response.json();
+                    if (config.alchemyApiKey) {
+                        apiKeyInput.value = config.alchemyApiKey;
+                    }
+                    if (config.defaultWalletAddress) {
+                        publicKeyInput.value = config.defaultWalletAddress;
+                    }
+                    // Save to localStorage for future use
+                    saveConfig();
+                    logStatus('📄 Configuration loaded from config.json', 'success');
+                } else {
+                    // No config.json file found - this is normal for public users
+                    console.log('No config.json found - starting with empty configuration');
+                }
+            } catch (error) {
+                // File doesn't exist or can't be loaded - this is normal for public users
+                console.log('Could not load config.json - starting with empty configuration');
+            }
+        }
+
+
+
+        function updateRpcUrls() {
+            const apiKey = apiKeyInput.value.trim();
+            const selectedNetwork = networkSelect.value;
+            
+            if (selectedNetwork === 'devnet') {
+                currentRpcUrls = getDevnetRpcUrls();
+            } else {
+                currentRpcUrls = getMainnetRpcUrls(apiKey || null);
+            }
+            currentRpcIndex = 0; // Reset to first endpoint
+        }
 
         // --- Database Functions ---
         
@@ -400,9 +516,9 @@
                 return;
             }
             
-            // Set the appropriate RPC URLs based on network selection
-            currentRpcUrls = selectedNetwork === 'devnet' ? DEVNET_RPC_URLS : MAINNET_RPC_URLS;
-            currentRpcIndex = 0; // Reset to first endpoint
+            // Save configuration and update RPC URLs
+            saveConfig();
+            updateRpcUrls();
             
             logStatus(`Using ${selectedNetwork.toUpperCase()} network`, 'info');
             
@@ -537,6 +653,16 @@
             }
         });
 
+        saveConfigBtn.addEventListener('click', () => {
+            if (!apiKeyInput.value.trim() && !publicKeyInput.value.trim()) {
+                logStatus('⚠️ Please enter at least an API key or wallet address before saving config.', 'error');
+                resultsContainer.style.display = 'block';
+                return;
+            }
+            downloadConfigFile();
+            resultsContainer.style.display = 'block';
+        });
+
         downloadBtn.addEventListener('click', () => {
             if (csvContent) {
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -551,8 +677,15 @@
             }
         });
 
-        // Update DB status when wallet address changes
-        publicKeyInput.addEventListener('input', updateDbStatus);
+        // Save configuration when inputs change
+        apiKeyInput.addEventListener('input', saveConfig);
+        publicKeyInput.addEventListener('input', async () => {
+            saveConfig();
+            await updateDbStatus();
+            // Load existing rewards when wallet address changes
+            await loadExistingRewards();
+        });
+        networkSelect.addEventListener('change', updateRpcUrls);
         
         // --- Solana RPC Functions ---
 
@@ -961,6 +1094,7 @@
                 const tr = document.createElement('tr');
                 tr.className = 'border-b border-gray-700 hover:bg-gray-700/50';
                 tr.innerHTML = `
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-blue-400 font-medium">${reward.epoch}</td>
                     <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-300">${date}</td>
                     <td class="px-4 py-3 whitespace-nowrap text-sm text-green-400">${rewardSol.toFixed(9)}</td>
                     <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-300">SOL</td>
@@ -986,13 +1120,58 @@
             csvContent = header + rows;
         }
 
-        // Initialize database on page load
+        // Load and display existing rewards from database
+        async function loadExistingRewards() {
+            const publicKey = publicKeyInput.value.trim();
+            if (!publicKey || !db) return;
+            
+            try {
+                const savedRewards = await getSavedRewards(publicKey);
+                if (savedRewards.length > 0) {
+                    // Sort rewards by epoch (newest first)
+                    savedRewards.sort((a, b) => b.epoch - a.epoch);
+                    
+                    // Show results container
+                    resultsContainer.style.display = 'block';
+                    
+                    // Display rewards table
+                    displayResults(savedRewards);
+                    
+                    // Prepare CSV
+                    prepareCsv(savedRewards);
+                    
+                    // Show summary and download button
+                    summary.style.display = 'flex';
+                    downloadBtn.style.display = 'block';
+                    
+                    // Log status
+                    logStatus(`📊 Loaded ${savedRewards.length} existing rewards from database`, 'success');
+                    logStatus(`💡 Click "Generate Report" to check for new rewards or use time ranges to scan specific periods`, 'info');
+                }
+            } catch (error) {
+                console.error('Failed to load existing rewards:', error);
+            }
+        }
+
+        // Initialize application on page load
         window.addEventListener('load', async () => {
             try {
+                // Initialize database first
                 await initDatabase();
+                
+                // Load saved configuration (localStorage first, then config.json)
+                await loadConfig();
+                
+                // Update DB status and RPC URLs based on loaded config
                 await updateDbStatus();
+                updateRpcUrls();
+                
+                // Load existing rewards if wallet address is available
+                if (publicKeyInput.value.trim()) {
+                    await loadExistingRewards();
+                }
             } catch (error) {
-                console.error('Failed to initialize database:', error);
+                console.error('Failed to initialize application:', error);
             }
         });
 

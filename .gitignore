@@ -1,0 +1,26 @@
+# Personal configuration with API keys and wallet addresses
+config.json
+
+# Python virtual environment (if recreated)
+.venv/
+venv/
+env/
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log 

@@ -45,23 +45,31 @@ The application includes an intelligent retry system that:
 ## Files
 
 - `SolanaStaking.html` - Main application (single HTML file with embedded CSS/JS)
-- `Sol.py` - Python script for basic Solana transaction fetching
 - `CursorChat.md` - Development log and conversation history
 
 ## Usage
 
 1. Open `SolanaStaking.html` in your web browser
-2. Enter your Solana wallet public key
-3. Configure your preferred settings
-4. Click "Generate Report"
-5. Download the CSV when complete
+2. (Optional) Enter your Alchemy API key for better reliability
+3. Enter your Solana wallet public key
+4. Configure your preferred settings
+5. Click "Generate Report"
+6. Download the CSV when complete
+
+## Configuration
+
+- **API Key**: Optional Alchemy API key for improved reliability and rate limits
+- **Wallet Address**: Your Solana wallet public key (withdrawer authority)
+- **Settings**: Saved automatically in browser localStorage
 
 ## API Requirements
 
 The application works with:
-- **Alchemy API** (recommended for reliable access)
+- **Alchemy API** (essential - get free key at [alchemy.com](https://alchemy.com))
 - **Public Solana RPC endpoints** (free but may have rate limits)
 - **Helius RPC** (demo access available)
+
+Sign up for a free Alchemy account and use your API key.
 
 ## Branch Structure
 
