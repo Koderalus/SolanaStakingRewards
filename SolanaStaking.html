@@ -806,6 +806,9 @@
              let specificEpochs = [];
              let minEpoch, isFullHistory = false;
              
+             // Get the selected time range from the dropdown first
+             const selectedRange = timeRangeSelect.value;
+             
              if (manualEpochsText) {
                  // Parse manual epochs
                  specificEpochs = manualEpochsText.split(',')
@@ -822,9 +825,6 @@
                  logStatus(`🎯 Manual Mode: Checking specific epochs: ${specificEpochs.join(', ')}`, 'success');
                  minEpoch = Math.min(...specificEpochs);
              } else {
-                 // Get the selected time range from the dropdown
-                 const selectedRange = timeRangeSelect.value;
-                 
                  if (selectedRange === 'full') {
                      minEpoch = 0; // Start from epoch 0 for full history
                      isFullHistory = true;

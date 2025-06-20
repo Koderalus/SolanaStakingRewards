@@ -194,6 +194,29 @@ This ensures no epochs are permanently lost due to temporary RPC issues and prov
 
 ---
 
+## Latest Fix: Variable Scope Error in Rewards Processing
+
+**Date**: Current session  
+**Issue**: Application stopped collecting results after recent changes. Error: "selectedRange is not defined"
+
+**Root Cause**: 
+- The `selectedRange` variable was declared inside an `else` block but used outside its scope
+- The `timeRangeText` calculation tried to access `selectedRange` which was only defined conditionally
+
+**Fix Applied**:
+- Moved `const selectedRange = timeRangeSelect.value;` declaration outside the conditional blocks
+- Made it available to all subsequent code that needs to reference it
+- Ensured proper variable scoping for the time range text generation
+
+**Result**: 
+- ✅ Application now correctly determines time range settings
+- ✅ Rewards processing continues normally
+- ✅ Time range text displays properly in logs
+
+**File Modified**: `SolanaStaking.html` - Fixed variable scoping in `getRewardsForAllAccounts()` function
+
+---
+
 ## Previous Entries
 
 ### Database System Implementation
