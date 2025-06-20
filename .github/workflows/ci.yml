@@ -1,0 +1,20 @@
+name: Basic CI Check
+
+on:
+  push:
+    branches:
+      - main # This workflow runs when code is pushed to main
+  pull_request:
+    branches:
+      - main # This workflow runs when a pull request targets main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run a simple script (this will be your status check)
+      run: echo "Hello from Koderalus CI!"
