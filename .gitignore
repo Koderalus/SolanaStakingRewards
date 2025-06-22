@@ -1,5 +1,22 @@
 # Personal configuration with API keys and wallet addresses
 config.json
+config-*.json
+*.config.json
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.staging
+*.env
+
+# API Keys and secrets
+*api*key*
+*secret*
+*private*
+*wallet*
+apikeys.txt
+secrets.txt
 
 # Python virtual environment (if recreated)
 .venv/
@@ -23,4 +40,21 @@ ehthumbs.db
 Thumbs.db
 
 # Logs
-*.log 
+*.log
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Security-sensitive patterns
+*password*
+*token*
+*credential*
+*auth*key* 
